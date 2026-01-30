@@ -10,7 +10,7 @@ import {
 } from "../components/ui/dialog";
 import { Progress } from "../components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { InfoIcon, SearchIcon, FilterIcon, MailIcon, PhoneIcon, HelpIcon, ChevronUpIcon, ChevronLeftIcon, FlameIcon, ReferralsIcon, FormIcon, CheckCircleIcon } from "../components/icons";
+import { InfoIcon, SearchIcon, FilterIcon, MailIcon, PhoneIcon, HelpIcon, ChevronUpIcon, ChevronLeftIcon, FlameIcon, ReferralsIcon, FormIcon, CheckCircleIcon, SortMenuIcon, SortAscIcon, SortDescIcon } from "../components/icons";
 
 // -------------------------------------------------
 // Mock metrics + contacts
@@ -280,7 +280,8 @@ function MetricCard({ label, value, unit, tooltip }) {
   );
 }
 
-function SectionTable({ title, description, rows, columns, badgeTone, headerRight, actionBar, pageSize, currentPage, onPageChange }) {
+function SectionTable({ title, description, rows, columns, badgeTone, headerRight, actionBar, pageSize, currentPage, onPageChange, sortConfig, onSort }) {
+  const [openSortKey, setOpenSortKey] = useState(null);
   const totalCount = rows.length;
   const totalPages = pageSize ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1;
   const page = currentPage != null ? Math.min(Math.max(1, currentPage), totalPages) : 1;
@@ -288,6 +289,12 @@ function SectionTable({ title, description, rows, columns, badgeTone, headerRigh
   const end = pageSize ? Math.min(start + pageSize, totalCount) : totalCount;
   const paginatedRows = rows.slice(start, end);
   const showPagination = pageSize != null && totalCount > 0;
+  const sortable = Boolean(onSort);
+
+  const handleSort = (key, dir) => {
+    if (typeof onSort === "function") onSort(key, dir);
+    setOpenSortKey(null);
+  };
 
   return (
     <Card className="shadow-sm">
@@ -302,15 +309,69 @@ function SectionTable({ title, description, rows, columns, badgeTone, headerRigh
       </CardHeader>
       {actionBar && <div className="px-4 pb-2">{actionBar}</div>}
       <CardContent>
+        {openSortKey && (
+          <div
+            className="fixed inset-0 z-30"
+            aria-hidden="true"
+            onClick={() => setOpenSortKey(null)}
+          />
+        )}
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="text-left text-gray-600 border-b bg-filter-bar/50">
-                {columns.map((c) => (
-                  <th key={c.key} className="py-2.5 pr-4 font-semibold">
-                    {c.label}
-                  </th>
-                ))}
+                {columns.map((c) => {
+                  const isSorted = sortConfig?.key === c.key;
+                  const isSortable = sortable && c.key !== "select";
+                  const isOpen = openSortKey === c.key;
+                  return (
+                    <th key={c.key} className="py-2.5 pr-4 font-semibold">
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <span className="flex items-center gap-1 min-w-0">
+                          {c.label}
+                          {isSorted && isSortable && (
+                            <span className="text-gray-500 text-xs shrink-0" aria-hidden>
+                              {sortConfig.dir === "asc" ? "↑" : "↓"}
+                            </span>
+                          )}
+                        </span>
+                        {isSortable && (
+                          <div className="relative shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setOpenSortKey((k) => (k === c.key ? null : c.key)); }}
+                              className="p-0.5 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                              aria-label={`Sort by ${typeof c.label === "string" ? c.label : c.key}`}
+                              aria-expanded={isOpen}
+                            >
+                              <SortMenuIcon size={14} />
+                            </button>
+                            {isOpen && (
+                              <div className="absolute right-0 top-full mt-0.5 z-40 min-w-[160px] bg-white border border-gray-200 rounded shadow-lg py-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSort(c.key, "asc")}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-100"
+                                >
+                                  <SortAscIcon size={16} className="text-gray-600 flex-shrink-0" />
+                                  Sort Ascending
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSort(c.key, "desc")}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-100"
+                                >
+                                  <SortDescIcon size={16} className="text-gray-600 flex-shrink-0" />
+                                  Sort Descending
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -385,6 +446,21 @@ function formatDateDisplay(isoDateStr) {
   return `${m}/${day}/${y}`;
 }
 
+function sortRowsByKey(rows, key, dir) {
+  if (!key || !dir) return rows;
+  return [...rows].sort((a, b) => {
+    const va = a[key];
+    const vb = b[key];
+    if (va == null && vb == null) return 0;
+    if (va == null) return dir === "asc" ? 1 : -1;
+    if (vb == null) return dir === "asc" ? -1 : 1;
+    if (typeof va === "number" && typeof vb === "number") return dir === "asc" ? va - vb : vb - va;
+    const sa = String(va);
+    const sb = String(vb);
+    return dir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+  });
+}
+
 function canSendReengagement(contact) {
   if (!contact.lastReengagementAt) return true;
   return daysSince(contact.lastReengagementAt) >= 30;
@@ -436,6 +512,16 @@ export default function ContactStatusDashboard() {
   const [selectedInactiveDisabledIds, setSelectedInactiveDisabledIds] = useState([]);
   const [selectAllDialogOpen, setSelectAllDialogOpen] = useState(false);
   const [selectAllDialogSection, setSelectAllDialogSection] = useState(null); // 'unengaged' | 'active' | 'inactive'
+  // Dev-only phase toggles (for explanation; not part of product design)
+  const [phase1, setPhase1] = useState(true);
+  const [phase2, setPhase2] = useState(true);
+  const [phase3, setPhase3] = useState(true);
+  const [phase4, setPhase4] = useState(true);
+  const [phaseTbd, setPhaseTbd] = useState(true);
+  // Sort state per section (key = column key, dir = 'asc' | 'desc'); user stays on same page when sorting
+  const [sortUnengaged, setSortUnengaged] = useState(null);
+  const [sortActive, setSortActive] = useState(null);
+  const [sortInactive, setSortInactive] = useState(null);
 
   const listTagMode = listTagFilterMode ?? "any";
   const listTags = listSelectedTags ?? [];
@@ -613,6 +699,19 @@ export default function ContactStatusDashboard() {
   const active = filteredContacts.filter((c) => c.bucket === "ACTIVE" && !disabledContactIds.includes(c.id));
   const inactive = filteredContacts.filter((c) => c.bucket === "INACTIVE" || disabledContactIds.includes(c.id));
 
+  const sortedUnengaged = useMemo(
+    () => sortRowsByKey(unengaged, sortUnengaged?.key, sortUnengaged?.dir),
+    [unengaged, sortUnengaged]
+  );
+  const sortedActive = useMemo(
+    () => sortRowsByKey(active, sortActive?.key, sortActive?.dir),
+    [active, sortActive]
+  );
+  const sortedInactive = useMemo(
+    () => sortRowsByKey(inactive, sortInactive?.key, sortInactive?.dir),
+    [inactive, sortInactive]
+  );
+
   const totalCount = filteredContacts.length;
   const unengagedCount = unengaged.length;
   const activeCount = active.length;
@@ -637,13 +736,13 @@ export default function ContactStatusDashboard() {
   const confirmSelectAllCurrentPage = () => {
     if (selectAllDialogSection === "unengaged") {
       const start = (pageUnengaged - 1) * CONTACTS_PAGE_SIZE;
-      setSelectedUnengagedIds(unengaged.slice(start, start + CONTACTS_PAGE_SIZE).map((c) => c.id));
+      setSelectedUnengagedIds(sortedUnengaged.slice(start, start + CONTACTS_PAGE_SIZE).map((c) => c.id));
     } else if (selectAllDialogSection === "active") {
       const start = (pageActive - 1) * CONTACTS_PAGE_SIZE;
-      setSelectedActiveIds(active.slice(start, start + CONTACTS_PAGE_SIZE).map((c) => c.id));
+      setSelectedActiveIds(sortedActive.slice(start, start + CONTACTS_PAGE_SIZE).map((c) => c.id));
     } else if (selectAllDialogSection === "inactive") {
       const start = (pageInactive - 1) * CONTACTS_PAGE_SIZE;
-      const pageRows = inactive.slice(start, start + CONTACTS_PAGE_SIZE);
+      const pageRows = sortedInactive.slice(start, start + CONTACTS_PAGE_SIZE);
       const disabledOnPage = pageRows.filter((c) => disabledContactIds.includes(c.id)).map((c) => c.id);
       setSelectedInactiveDisabledIds(disabledOnPage);
     }
@@ -735,7 +834,12 @@ export default function ContactStatusDashboard() {
     },
     {
       key: "daysUnengaged",
-      label: "Days unengaged (out of 365)",
+      label: (
+        <span>
+          <span className="block">Days unengaged</span>
+          <span className="block text-[11px] text-gray-500 font-normal">out of 365</span>
+        </span>
+      ),
       render: (r) => (
         <span>
           {r.daysUnengaged} days
@@ -748,7 +852,7 @@ export default function ContactStatusDashboard() {
     { key: "lastEventAt", label: "Last activity" },
     {
       key: "lastReengagementAt",
-      label: "Last reengagement campaign",
+      label: "Re-engagement sent",
       render: (r) => (
         <span className="text-xs text-gray-600">
           {r.lastReengagementAt ? r.lastReengagementAt : "—"}
@@ -842,7 +946,7 @@ export default function ContactStatusDashboard() {
     { key: "lastEventAt", label: "Last activity" },
     {
       key: "reason",
-      label: "Why inactive",
+      label: "Inactive Reason",
       render: (r) => <span className="text-gray-600 text-xs">{r.reason}</span>,
     },
   ];
@@ -894,6 +998,34 @@ export default function ContactStatusDashboard() {
               <span>Help</span>
             </div>
           </div>
+          {/* Dev-only phase toggles - for explanation only, not part of design */}
+          <div className="mx-3 mt-2 p-3 rounded-lg border-2 border-amber-400 bg-amber-50/95 space-y-3">
+            <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">Dev phases</div>
+            {[
+              { label: "Phase 1", checked: phase1, onChange: setPhase1 },
+              { label: "Phase 2", checked: phase2, onChange: setPhase2 },
+              { label: "Phase 3", checked: phase3, onChange: setPhase3 },
+              { label: "Phase 4", checked: phase4, onChange: setPhase4 },
+              { label: "Phase TBD", checked: phaseTbd, onChange: setPhaseTbd },
+            ].map(({ label, checked, onChange }) => (
+              <label key={label} className="flex items-center justify-between gap-2 cursor-pointer text-gray-800 text-sm">
+                <span className="font-medium">{label}</span>
+                <span
+                  role="switch"
+                  aria-checked={checked}
+                  tabIndex={0}
+                  onClick={(e) => { e.preventDefault(); onChange(!checked); }}
+                  onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onChange(!checked); } }}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1 ${checked ? "bg-green-500" : "bg-gray-300"}`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full border border-gray-200 bg-white shadow ring-0 transition-transform ${checked ? "translate-x-[22px]" : "translate-x-0.5"}`}
+                    style={{ marginTop: 2 }}
+                  />
+                </span>
+              </label>
+            ))}
+          </div>
           {/* User profile */}
           <div className="p-4 border-t border-white/20">
             <div className="flex items-center gap-1">
@@ -918,30 +1050,35 @@ export default function ContactStatusDashboard() {
             <h1 className="text-xl font-bold">Contact Status Dashboard</h1>
           </header>
 
-          {/* Back to contacts link */}
-          <div className="px-6 py-2 bg-[#F3F3F3] border-b border-gray-200">
-            <a
-              href="#"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-800 no-underline hover:text-gray-900"
-              onClick={(e) => e.preventDefault()}
-            >
-              <ChevronLeftIcon size={18} className="text-gray-800" />
-              Back to contacts
-            </a>
-          </div>
+          {/* Phase 1: Back to contacts link */}
+          {phase1 && (
+            <div className="px-6 py-2 bg-[#F3F3F3] border-b border-gray-200">
+              <a
+                href="#"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-800 no-underline hover:text-gray-900"
+                onClick={(e) => e.preventDefault()}
+              >
+                <ChevronLeftIcon size={18} className="text-gray-800" />
+                Back to contacts
+              </a>
+            </div>
+          )}
 
-          {/* Subheader: description only */}
-          <div className="px-6 py-3 border-b border-gray-200 bg-[#F3F3F3]">
-            <p className="text-sm text-gray-600">
-              Read-only view of your list health: who is unengaged, who is safe to send to, and who is inactive.
-            </p>
-          </div>
+          {/* Phase 1: Subheader description */}
+          {phase1 && (
+            <div className="px-6 py-3 border-b border-gray-200 bg-[#F3F3F3]">
+              <p className="text-sm text-gray-600">
+                Read-only view of your list health: who is unengaged, who is safe to send to, and who is inactive.
+              </p>
+            </div>
+          )}
 
           <div className="p-6 space-y-6 flex-1">
-            {/* Core Deliverability Metrics */}
-            <section aria-labelledby="core-deliverability-metrics">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
-                <h2 id="core-deliverability-metrics" className="text-sm font-semibold text-gray-700">
+            {/* Phase 4: Core Deliverability Metrics */}
+            {phase4 && (
+            <section aria-labelledby="core-deliverability-metrics" className="border border-gray-300 rounded-lg bg-white shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 pt-4 pb-2">
+                <h2 id="core-deliverability-metrics" className="text-lg font-semibold text-gray-800">
                   Core deliverability metrics (last 30 days)
                 </h2>
                 <div className="flex items-center gap-2 sm:ml-auto flex-wrap">
@@ -974,11 +1111,11 @@ export default function ContactStatusDashboard() {
                       {tagPicklistOpen && (
                         <>
                           <div
-                            className="fixed inset-0 z-40"
+                            className="fixed inset-0 z-[100]"
                             aria-hidden="true"
                             onClick={cancelTagPicklist}
                           />
-                          <div className="absolute left-full top-0 ml-1 z-50 w-80 max-h-[420px] bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
+                          <div className="absolute left-full top-0 ml-1 z-[110] w-80 max-h-[420px] bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
                             <p className="text-sm font-medium text-gray-800 mb-3">Show metrics for contacts that are:</p>
                             <div className="space-y-3 flex-shrink-0">
                               <label className="flex items-center gap-2 cursor-pointer">
@@ -1065,11 +1202,11 @@ export default function ContactStatusDashboard() {
                       {campaignTypePicklistOpen && (
                         <>
                           <div
-                            className="fixed inset-0 z-40"
+                            className="fixed inset-0 z-[100]"
                             aria-hidden="true"
                             onClick={cancelCampaignTypePicklist}
                           />
-                          <div className="absolute left-full top-0 ml-1 z-50 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
+                          <div className="absolute left-full top-0 ml-1 z-[110] w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
                             <div className="space-y-2 flex-shrink-0">
                               {CAMPAIGN_TYPE_OPTIONS.map((option) => (
                                 <label
@@ -1110,7 +1247,7 @@ export default function ContactStatusDashboard() {
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-4 pb-4">
                 {METRICS.map((m) => (
                   <MetricCard
                     key={m.key}
@@ -1122,8 +1259,10 @@ export default function ContactStatusDashboard() {
                 ))}
               </div>
             </section>
+            )}
 
-            {/* Education / status explanation - light blue card */}
+            {/* Phase 1: Education / status explanation - light blue card */}
+            {phase1 && (
             <Card className="border border-[#68BCE1]/40 bg-[#68BCE1]/10 shadow-sm">
               <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="space-y-1 text-sm text-gray-700">
@@ -1139,15 +1278,18 @@ export default function ContactStatusDashboard() {
                   </p>
                 </div>
                 <button
-                  className="self-start sm:self-auto bg-white border border-header-bar/50 text-[#2a6b7c] px-3 py-2 rounded-md text-sm hover:bg-header-bar/10 font-medium"
+                  type="button"
+                  className="self-start sm:self-auto mt-2.5 px-3 py-1.5 text-sm font-medium rounded border border-header-bar/50 bg-white text-[#2a6b7c] hover:bg-[#00AFEF] hover:text-white transition-colors"
                   onClick={() => {}}
                 >
-                  Open deliverability explanation
+                  Open Contact Status Guide
                 </button>
               </CardContent>
             </Card>
+            )}
 
-            {/* Global filters + counts */}
+            {/* Phase 2: Global filters + counts */}
+            {phase2 && (
             <Card className="shadow-sm">
               <CardContent className="p-4 space-y-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-6">
@@ -1396,6 +1538,7 @@ export default function ContactStatusDashboard() {
                   </div>
                 </div>
 
+                {phaseTbd && (
                 <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 border-t border-filter-bar pt-3">
                   <div className="inline-flex items-center gap-1">
                     <FilterIcon size={14} className="text-gray-500" />
@@ -1411,22 +1554,27 @@ export default function ContactStatusDashboard() {
                     <span className="font-semibold text-gray-800 ml-1">{inactiveCount}</span> inactive
                   </span>
                 </div>
+                )}
               </CardContent>
             </Card>
+            )}
 
-            {/* Section 1: Unengaged contacts at risk */}
+            {/* Phase TBD: Unengaged contacts at risk of sunset */}
+            {phaseTbd && (
             <section className="space-y-3">
               <SectionTable
                 title="Unengaged contacts at risk of sunset"
                 badgeTone="orange"
                 description="Contacts who have not engaged recently and will be sunset after 365 days of inactivity. Use a reengagement campaign or disable them if you no longer want them on campaigns."
-                rows={unengaged}
-                columns={unengagedColumns}
+                rows={sortedUnengaged}
+                columns={phase3 ? unengagedColumns : unengagedColumns.filter((c) => c.key !== "select")}
+                sortConfig={phaseTbd ? sortUnengaged : null}
+                onSort={phaseTbd ? (key, dir) => setSortUnengaged({ key, dir: dir ?? "asc" }) : undefined}
                 actionBar={
-                  selectedUnengagedIds.length > 0 ? (
+                  phase3 && selectedUnengagedIds.length > 0 ? (
                     <button
                       type="button"
-                      className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                      className="mt-2.5 px-3 py-1.5 text-sm font-medium rounded bg-[#6B8394] text-white hover:bg-[#00AFEF] hover:text-white transition-colors"
                       onClick={handleDisableUnengaged}
                     >
                       Disable
@@ -1438,20 +1586,25 @@ export default function ContactStatusDashboard() {
                 onPageChange={setPageUnengaged}
               />
             </section>
+            )}
 
-            {/* Section 2: Active / Pending vetting */}
+            {/* Phase 1: Section 2 - Active / Pending vetting */}
+            {phase1 && (
+            <>
             <section>
               <SectionTable
                 title="Active & pending (vetting) contacts"
                 badgeTone="green"
                 description="Contacts who are safe to send to. Green = fully active, Blue = still in a light vetting period."
-                rows={active}
-                columns={activeColumns}
+                rows={sortedActive}
+                columns={phase3 ? activeColumns : activeColumns.filter((c) => c.key !== "select")}
+                sortConfig={phaseTbd ? sortActive : null}
+                onSort={phaseTbd ? (key, dir) => setSortActive({ key, dir: dir ?? "asc" }) : undefined}
                 actionBar={
-                  selectedActiveIds.length > 0 ? (
+                  phase3 && selectedActiveIds.length > 0 ? (
                     <button
                       type="button"
-                      className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                      className="mt-2.5 px-3 py-1.5 text-sm font-medium rounded bg-[#6B8394] text-white hover:bg-[#00AFEF] hover:text-white transition-colors"
                       onClick={handleDisableActive}
                     >
                       Disable
@@ -1470,13 +1623,15 @@ export default function ContactStatusDashboard() {
                 title="Inactive contacts"
                 badgeTone="gray"
                 description="Contacts that can no longer receive campaigns from you (for example SUNSET, UNSUBSCRIBED, or SPAM_REPORT). Disabled contacts can be re-enabled."
-                rows={inactive}
-                columns={inactiveColumns}
+                rows={sortedInactive}
+                columns={phase3 ? inactiveColumns : inactiveColumns.filter((c) => c.key !== "select")}
+                sortConfig={phaseTbd ? sortInactive : null}
+                onSort={phaseTbd ? (key, dir) => setSortInactive({ key, dir: dir ?? "asc" }) : undefined}
                 actionBar={
-                  selectedInactiveDisabledIds.length > 0 ? (
+                  phase3 && selectedInactiveDisabledIds.length > 0 ? (
                     <button
                       type="button"
-                      className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                      className="mt-2.5 px-3 py-1.5 text-sm font-medium rounded bg-[#6B8394] text-white hover:bg-[#00AFEF] hover:text-white transition-colors"
                       onClick={handleEnableInactive}
                     >
                       Enable
@@ -1488,6 +1643,8 @@ export default function ContactStatusDashboard() {
                 onPageChange={setPageInactive}
               />
             </section>
+            </>
+            )}
           </div>
         </main>
       </div>

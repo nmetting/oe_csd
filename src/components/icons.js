@@ -108,3 +108,38 @@ export function CheckCircleIcon({ size = 20, className = "" }) {
     </svg>
   );
 }
+
+/** Three horizontal lines - sort menu trigger in grid headers */
+export function SortMenuIcon({ size = 16, className = "" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="5" y1="7" x2="19" y2="7" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <line x1="5" y1="17" x2="19" y2="17" />
+    </svg>
+  );
+}
+
+/** A over Z with up arrow - Sort Ascending */
+export function SortAscIcon({ size = 16, className = "" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <text x="4" y="10" fontSize="10" fontWeight="bold" fill="currentColor">A</text>
+      <text x="4" y="18" fontSize="10" fontWeight="bold" fill="currentColor">Z</text>
+      <polyline points="14 6 17 3 20 6" />
+      <line x1="17" y1="3" x2="17" y2="14" />
+    </svg>
+  );
+}
+
+/** Z over A with down arrow - Sort Descending */
+export function SortDescIcon({ size = 16, className = "" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <text x="4" y="10" fontSize="10" fontWeight="bold" fill="currentColor">Z</text>
+      <text x="4" y="18" fontSize="10" fontWeight="bold" fill="currentColor">A</text>
+      <polyline points="14 18 17 21 20 18" />
+      <line x1="17" y1="21" x2="17" y2="10" />
+    </svg>
+  );
+}
