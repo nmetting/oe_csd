@@ -324,8 +324,12 @@ function SectionTable({ title, description, rows, columns, badgeTone, headerRigh
                   const isSorted = sortConfig?.key === c.key;
                   const isSortable = sortable && c.key !== "select";
                   const isOpen = openSortKey === c.key;
+                  const isSelectCol = c.key === "select";
                   return (
-                    <th key={c.key} className="py-2.5 pr-4 font-semibold">
+                    <th key={c.key} className={`py-2.5 pr-4 font-semibold ${isSelectCol ? "w-12 min-w-[3rem]" : ""}`}>
+                      {isSelectCol ? (
+                        c.label
+                      ) : (
                       <div className="flex items-center justify-between gap-2 w-full">
                         <span className="flex items-center gap-1 min-w-0">
                           {c.label}
@@ -369,6 +373,7 @@ function SectionTable({ title, description, rows, columns, badgeTone, headerRigh
                           </div>
                         )}
                       </div>
+                      )}
                     </th>
                   );
                 })}
@@ -385,7 +390,7 @@ function SectionTable({ title, description, rows, columns, badgeTone, headerRigh
                 paginatedRows.map((r) => (
                   <tr key={r.id} className="border-b border-gray-100 hover:bg-[#F3F3F3]">
                     {columns.map((c) => (
-                      <td key={c.key} className="py-2.5 pr-4 text-gray-700">
+                      <td key={c.key} className={`py-2.5 pr-4 text-gray-700 ${c.key === "select" ? "w-12 min-w-[3rem]" : ""}`}>
                         {typeof c.render === "function" ? c.render(r) : r[c.key]}
                       </td>
                     ))}
@@ -512,6 +517,10 @@ export default function ContactStatusDashboard() {
   const [selectedInactiveDisabledIds, setSelectedInactiveDisabledIds] = useState([]);
   const [selectAllDialogOpen, setSelectAllDialogOpen] = useState(false);
   const [selectAllDialogSection, setSelectAllDialogSection] = useState(null); // 'unengaged' | 'active' | 'inactive'
+  // Disable/Enable confirmation dialog: action = 'disableUnengaged' | 'disableActive' | 'enableInactive'
+  const [confirmDisableEnableOpen, setConfirmDisableEnableOpen] = useState(false);
+  const [confirmDisableEnableAction, setConfirmDisableEnableAction] = useState(null);
+  const [confirmDisableEnableCount, setConfirmDisableEnableCount] = useState(0);
   // Dev-only phase toggles (for explanation; not part of product design)
   const [phase1, setPhase1] = useState(true);
   const [phase2, setPhase2] = useState(true);
@@ -750,8 +759,10 @@ export default function ContactStatusDashboard() {
   };
 
   const toggleSelectAllUnengaged = (checked) => {
-    if (checked) openSelectAllDialog("unengaged");
-    else setSelectedUnengagedIds([]);
+    if (checked) {
+      if (unengaged.length > CONTACTS_PAGE_SIZE) openSelectAllDialog("unengaged");
+      else setSelectedUnengagedIds(unengaged.map((c) => c.id));
+    } else setSelectedUnengagedIds([]);
   };
 
   const toggleSelectUnengaged = (id, checked) => {
@@ -774,8 +785,10 @@ export default function ContactStatusDashboard() {
 
   const allActiveSelected = active.length > 0 && selectedActiveIds.length === active.length;
   const toggleSelectAllActive = (checked) => {
-    if (checked) openSelectAllDialog("active");
-    else setSelectedActiveIds([]);
+    if (checked) {
+      if (active.length > CONTACTS_PAGE_SIZE) openSelectAllDialog("active");
+      else setSelectedActiveIds(active.map((c) => c.id));
+    } else setSelectedActiveIds([]);
   };
   const toggleSelectActive = (id, checked) => {
     setSelectedActiveIds((prev) => (checked ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id)));
@@ -789,8 +802,10 @@ export default function ContactStatusDashboard() {
   const inactiveDisabled = inactive.filter((c) => disabledContactIds.includes(c.id));
   const allInactiveDisabledSelected = inactiveDisabled.length > 0 && selectedInactiveDisabledIds.length === inactiveDisabled.length;
   const toggleSelectAllInactiveDisabled = (checked) => {
-    if (checked) openSelectAllDialog("inactive");
-    else setSelectedInactiveDisabledIds([]);
+    if (checked) {
+      if (inactiveDisabled.length > CONTACTS_PAGE_SIZE) openSelectAllDialog("inactive");
+      else setSelectedInactiveDisabledIds(inactiveDisabled.map((c) => c.id));
+    } else setSelectedInactiveDisabledIds([]);
   };
   const toggleSelectInactiveDisabled = (id, checked) => {
     setSelectedInactiveDisabledIds((prev) => (checked ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id)));
@@ -801,11 +816,40 @@ export default function ContactStatusDashboard() {
     setSelectedInactiveDisabledIds([]);
   };
 
+  const openConfirmDisableUnengaged = () => {
+    setConfirmDisableEnableAction("disableUnengaged");
+    setConfirmDisableEnableCount(selectedUnengagedIds.length);
+    setConfirmDisableEnableOpen(true);
+  };
+  const openConfirmDisableActive = () => {
+    setConfirmDisableEnableAction("disableActive");
+    setConfirmDisableEnableCount(selectedActiveIds.length);
+    setConfirmDisableEnableOpen(true);
+  };
+  const openConfirmEnableInactive = () => {
+    setConfirmDisableEnableAction("enableInactive");
+    setConfirmDisableEnableCount(selectedInactiveDisabledIds.length);
+    setConfirmDisableEnableOpen(true);
+  };
+  const confirmDisableEnableYes = () => {
+    if (confirmDisableEnableAction === "disableUnengaged") handleDisableUnengaged();
+    else if (confirmDisableEnableAction === "disableActive") handleDisableActive();
+    else if (confirmDisableEnableAction === "enableInactive") handleEnableInactive();
+    setConfirmDisableEnableOpen(false);
+    setConfirmDisableEnableAction(null);
+    setConfirmDisableEnableCount(0);
+  };
+  const closeConfirmDisableEnable = () => {
+    setConfirmDisableEnableOpen(false);
+    setConfirmDisableEnableAction(null);
+    setConfirmDisableEnableCount(0);
+  };
+
   const unengagedColumns = [
     {
       key: "select",
       label: (
-        <div className="flex items-center justify-center">
+        <div className="flex w-full items-center justify-center">
           <input
             type="checkbox"
             aria-label="Select all unengaged contacts"
@@ -815,7 +859,7 @@ export default function ContactStatusDashboard() {
         </div>
       ),
       render: (r) => (
-        <div className="flex items-center justify-center">
+        <div className="flex w-full items-center justify-center">
           <input
             type="checkbox"
             aria-label={`Select ${r.name}`}
@@ -865,7 +909,7 @@ export default function ContactStatusDashboard() {
     {
       key: "select",
       label: (
-        <div className="flex items-center justify-center">
+        <div className="flex w-full items-center justify-center">
           <input
             type="checkbox"
             aria-label="Select all active contacts"
@@ -875,7 +919,7 @@ export default function ContactStatusDashboard() {
         </div>
       ),
       render: (r) => (
-        <div className="flex items-center justify-center">
+        <div className="flex w-full items-center justify-center">
           <input
             type="checkbox"
             aria-label={`Select ${r.name}`}
@@ -904,7 +948,7 @@ export default function ContactStatusDashboard() {
     {
       key: "select",
       label: (
-        <div className="flex items-center justify-center">
+        <div className="flex w-full items-center justify-center">
           {inactiveDisabled.length > 0 ? (
             <input
               type="checkbox"
@@ -919,7 +963,7 @@ export default function ContactStatusDashboard() {
       ),
       render: (r) =>
         disabledContactIds.includes(r.id) ? (
-          <div className="flex items-center justify-center">
+          <div className="flex w-full items-center justify-center">
             <input
               type="checkbox"
               aria-label={`Select ${r.name}`}
@@ -1575,7 +1619,7 @@ export default function ContactStatusDashboard() {
                     <button
                       type="button"
                       className="mt-2.5 px-3 py-1.5 text-sm font-medium rounded bg-[#6B8394] text-white hover:bg-[#00AFEF] hover:text-white transition-colors"
-                      onClick={handleDisableUnengaged}
+                      onClick={openConfirmDisableUnengaged}
                     >
                       Disable
                     </button>
@@ -1605,7 +1649,7 @@ export default function ContactStatusDashboard() {
                     <button
                       type="button"
                       className="mt-2.5 px-3 py-1.5 text-sm font-medium rounded bg-[#6B8394] text-white hover:bg-[#00AFEF] hover:text-white transition-colors"
-                      onClick={handleDisableActive}
+                      onClick={openConfirmDisableActive}
                     >
                       Disable
                     </button>
@@ -1632,7 +1676,7 @@ export default function ContactStatusDashboard() {
                     <button
                       type="button"
                       className="mt-2.5 px-3 py-1.5 text-sm font-medium rounded bg-[#6B8394] text-white hover:bg-[#00AFEF] hover:text-white transition-colors"
-                      onClick={handleEnableInactive}
+                      onClick={openConfirmEnableInactive}
                     >
                       Enable
                     </button>
@@ -1648,6 +1692,48 @@ export default function ContactStatusDashboard() {
           </div>
         </main>
       </div>
+
+      {/* Disable/Enable confirmation dialog */}
+      <Dialog open={confirmDisableEnableOpen} onOpenChange={(open) => { if (!open) closeConfirmDisableEnable(); }}>
+        <DialogContent className="max-w-md">
+          <div className="flex items-start justify-between gap-4">
+            <DialogHeader className="flex-1">
+              <DialogTitle>
+                {confirmDisableEnableAction === "enableInactive" ? "Enable contacts" : "Disable contacts"}
+              </DialogTitle>
+            </DialogHeader>
+            <button
+              type="button"
+              aria-label="Close"
+              className="shrink-0 rounded p-1 text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+              onClick={closeConfirmDisableEnable}
+            >
+              <span className="text-lg leading-none">×</span>
+            </button>
+          </div>
+          <p className="text-sm text-gray-700 mt-2">
+            {confirmDisableEnableAction === "enableInactive"
+              ? `Are you sure you want to Enable ${confirmDisableEnableCount} contact${confirmDisableEnableCount !== 1 ? "s" : ""}?`
+              : `Are you sure you want to Disable ${confirmDisableEnableCount} contact${confirmDisableEnableCount !== 1 ? "s" : ""}?`}
+          </p>
+          <DialogFooter className="mt-4 flex justify-start gap-2 border-t pt-4">
+            <button
+              type="button"
+              className="px-4 py-2 text-sm font-medium text-gray-800 bg-gray-200 border border-gray-300 rounded hover:bg-gray-300"
+              onClick={closeConfirmDisableEnable}
+            >
+              No
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 text-sm font-medium text-gray-800 bg-gray-200 border border-gray-300 rounded hover:bg-gray-300"
+              onClick={confirmDisableEnableYes}
+            >
+              Yes
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Select All Records confirmation dialog */}
       <Dialog open={selectAllDialogOpen} onOpenChange={(open) => { setSelectAllDialogOpen(open); if (!open) setSelectAllDialogSection(null); }}>
