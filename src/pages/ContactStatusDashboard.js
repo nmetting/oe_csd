@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import {
   Dialog,
@@ -10,7 +10,10 @@ import {
 } from "../components/ui/dialog";
 import { Progress } from "../components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { InfoIcon, SearchIcon, FilterIcon, MailIcon, PhoneIcon, HelpIcon, ChevronUpIcon, ChevronLeftIcon, FlameIcon, ReferralsIcon, FormIcon, CheckCircleIcon, SortMenuIcon, SortAscIcon, SortDescIcon } from "../components/icons";
+import { InfoIcon, SearchIcon, FilterIcon, MailIcon, PhoneIcon, HelpIcon, ChevronUpIcon, ChevronLeftIcon, FlameIcon, ReferralsIcon, FormIcon, CheckCircleIcon, SortMenuIcon, SortAscIcon, SortDescIcon, DownloadIcon } from "../components/icons";
+import ContactHealthTiles, { getBucket } from "../components/ContactHealthTiles";
+import ExportDialog from "../components/ExportDialog";
+import ExportPreview from "./ExportPreview";
 
 // -------------------------------------------------
 // Mock metrics + contacts
@@ -52,12 +55,16 @@ const CONTACTS = [
     id: "u_101",
     name: "Ava Thompson",
     email: "ava.thompson@example.com",
+    address: "123 Main St, City, ST 12345",
+    createdOn: "2023-01-15",
+    lastEventAt: "2025-04-21",
+    lastActivity: "2025-04-21",
+    lastReengagementAt: null,
+    reason: "No opens or clicks in 210 days",
+    inactiveReason: null,
     status: "UNENGAGED",
     bucket: "UNENGAGED",
     daysUnengaged: 210,
-    lastEventAt: "2025-04-21",
-    lastReengagementAt: null,
-    reason: "No opens or clicks in 210 days",
     tags: ["Sphere"],
     segment: "Newsletter",
     activityType: "form_submitter",
@@ -94,11 +101,15 @@ const CONTACTS = [
     id: "a_201",
     name: "Active Buyer",
     email: "buyer@client.com",
+    address: "456 Oak Ave, Town, ST 67890",
+    createdOn: "2024-06-01",
+    lastEventAt: "2025-11-20",
+    lastActivity: "2025-11-20",
+    reason: "Opened last weekly campaign",
+    inactiveReason: null,
     status: "ACTIVE",
     bucket: "ACTIVE",
     daysUnengaged: 5,
-    lastEventAt: "2025-11-20",
-    reason: "Opened last weekly campaign",
     tags: ["Buyer lead"],
     segment: "Drip: Buyers",
     activityType: "hot_lead",
@@ -136,18 +147,25 @@ const CONTACTS = [
   { id: "a_220", name: "Emery Clark", email: "emery.clark@example.org", status: "PENDING_VETTING", bucket: "ACTIVE", daysUnengaged: 15, lastEventAt: "2025-11-10", reason: "New integration sync", tags: ["Sphere"], segment: "Newsletter", activityType: "form_submitter" },
   { id: "a_221", name: "Finley Lewis", email: "finley.lewis@client.com", status: "ACTIVE", bucket: "ACTIVE", daysUnengaged: 0, lastEventAt: "2025-11-27", reason: "Just subscribed", tags: ["Buyer lead"], segment: "Drip: Buyers", activityType: "hot_lead" },
   { id: "a_222", name: "Rowan Hill", email: "rowan.hill@vetting.io", status: "PENDING_VETTING", bucket: "ACTIVE", daysUnengaged: 5, lastEventAt: "2025-11-21", reason: "Partner list, under review", tags: ["Imported list"], segment: "New Imports", activityType: "referral" },
-  { id: "d_401", name: "Nina Torres", email: "nina.torres@example.com", status: "ACTIVE", bucket: "ACTIVE", daysUnengaged: 3, lastEventAt: "2025-11-24", reason: "Temporarily disabled by user", tags: ["Past client"], segment: "Newsletter", activityType: "form_submitter" },
-  { id: "d_402", name: "Owen Grant", email: "owen.grant@contoso.com", status: "PENDING_VETTING", bucket: "ACTIVE", daysUnengaged: 6, lastEventAt: "2025-11-20", reason: "Disabled during list cleanup", tags: ["Buyer lead"], segment: "Drip: Buyers", activityType: "hot_lead" },
-  { id: "d_403", name: "Sage Coleman", email: "sage.coleman@client.io", status: "ACTIVE", bucket: "ACTIVE", daysUnengaged: 2, lastEventAt: "2025-11-25", reason: "Paused for compliance review", tags: ["Imported list"], segment: "New Imports", activityType: "referral" },
+  { id: "d_401", name: "Nina Torres", email: "nina.torres@example.com", status: "DISABLED", bucket: "INACTIVE", daysUnengaged: 3, lastEventAt: "2025-11-24", reason: "Temporarily disabled by user", tags: ["Past client"], segment: "Newsletter", activityType: "form_submitter" },
+  { id: "d_402", name: "Owen Grant", email: "owen.grant@contoso.com", status: "DISABLED", bucket: "INACTIVE", daysUnengaged: 6, lastEventAt: "2025-11-20", reason: "Disabled during list cleanup", tags: ["Buyer lead"], segment: "Drip: Buyers", activityType: "hot_lead" },
+  { id: "d_403", name: "Sage Coleman", email: "sage.coleman@client.io", status: "DISABLED", bucket: "INACTIVE", daysUnengaged: 2, lastEventAt: "2025-11-25", reason: "Paused for compliance review", tags: ["Imported list"], segment: "New Imports", activityType: "referral" },
+  { id: "a_223", name: "Robin Nash", email: "robin.nash@example.com", status: "ACTIVE", bucket: "ACTIVE", daysUnengaged: 1, lastEventAt: "2025-01-28", reason: "Opened campaign yesterday", tags: ["Buyer lead"], segment: "Drip: Buyers", activityType: "hot_lead" },
+  { id: "a_224", name: "Jordan Blake", email: "jordan.blake@contoso.com", status: "ACTIVE", bucket: "ACTIVE", daysUnengaged: 3, lastEventAt: "2025-01-26", reason: "Clicked CTA earlier this week", tags: ["Past client"], segment: "Quarterly Touch", activityType: "referral" },
+  { id: "a_225", name: "Skylar Reid", email: "skylar.reid@client.io", status: "ACTIVE", bucket: "ACTIVE", daysUnengaged: 5, lastEventAt: "2025-01-24", reason: "Engaged with weekly digest", tags: ["Sphere"], segment: "Newsletter", activityType: "form_submitter" },
   {
     id: "i_301",
     name: "Dormant Lead",
     email: "dl@example.org",
+    address: "",
+    createdOn: "2022-03-10",
+    lastEventAt: "2024-12-01",
+    lastActivity: "2024-12-01",
     status: "SUNSET",
     bucket: "INACTIVE",
     daysUnengaged: 365,
-    lastEventAt: "2024-12-01",
     reason: "No engagement in 365 days; permanently sunset",
+    inactiveReason: "Inactive due to no engagement",
     tags: ["Old lead"],
     segment: "Legacy",
     activityType: "referral",
@@ -177,6 +195,37 @@ const CONTACTS = [
     segment: "New Imports",
     activityType: "referral",
   },
+  // ~30 new inactive records with status + Inactive Reason
+  { id: "i_304", name: "Dana Webb", email: "dana.webb@example.com", status: "DEDUPED", bucket: "INACTIVE", lastEventAt: "2025-08-12", reason: "Owned by another account", tags: ["Past client"], segment: "Newsletter" },
+  { id: "i_305", name: "Kyle Ortiz", email: "kyle.ortiz@contoso.com", status: "BLOCKED", bucket: "INACTIVE", lastEventAt: "2025-07-22", reason: "Marked as bad email", tags: ["Buyer lead"], segment: "Drip: Buyers" },
+  { id: "i_306", name: "Jordan Fry", email: "jordan.fry@testblock.dev", status: "BLOCKED_DOMAIN", bucket: "INACTIVE", lastEventAt: "2025-09-01", reason: "Email domain blocked during testing", tags: ["Imported list"], segment: "New Imports" },
+  { id: "i_307", name: "Morgan Shaw", email: "morgan.shaw@spamdomain.net", status: "GLOBAL_BLOCKED_DOMAIN", bucket: "INACTIVE", lastEventAt: "2025-06-15", reason: "Email domain blocked system-wide", tags: ["Sphere"], segment: "Newsletter" },
+  { id: "i_308", name: "Riley Banks", email: "riley.banks@example.org", status: "UNSUBSCRIBED", bucket: "INACTIVE", lastEventAt: "2025-10-01", reason: "Opted out via unsubscribe link", tags: ["Past client"], segment: "Quarterly Touch" },
+  { id: "i_309", name: "Casey Fox", email: "casey.fox@mail.com", status: "SPAM_REPORT", bucket: "INACTIVE", lastEventAt: "2025-05-20", reason: "Marked as spam by recipient", tags: ["Old lead"], segment: "Legacy" },
+  { id: "i_310", name: "Avery Stone", email: "avery.stone@client.io", status: "CANCELED", bucket: "INACTIVE", lastEventAt: "2025-09-10", reason: "Was active before being canceled", tags: ["Buyer lead"], segment: "Drip: Buyers" },
+  { id: "i_311", name: "Quinn West", email: "quinn.west@example.com", status: "CANCELED_DURING_TESTING", bucket: "INACTIVE", lastEventAt: "2025-08-05", reason: "Was in testing before being canceled", tags: ["Imported list"], segment: "New Imports" },
+  { id: "i_312", name: "Skyler Cole", email: "skyler.cole@contoso.com", status: "DISABLED", bucket: "INACTIVE", lastEventAt: "2025-11-01", reason: "Disabled by user", tags: ["Past client"], segment: "Newsletter" },
+  { id: "i_313", name: "Drew Hayes", email: "info@acme.com", status: "ROLE", bucket: "INACTIVE", lastEventAt: "2025-07-18", reason: "Role-based email detected", tags: ["Sphere"], segment: "Newsletter" },
+  { id: "i_314", name: "Blake Ward", email: "blake.ward@customer.io", status: "CUSTOMER", bucket: "INACTIVE", lastEventAt: "2025-10-15", reason: "Suppressed (current customer email)", tags: ["Past client"], segment: "Quarterly Touch" },
+  { id: "i_315", name: "Cameron Lane", email: "cameron.lane@example.net", status: "PERM_DELETE", bucket: "INACTIVE", lastEventAt: "2025-04-30", reason: "Permanently removed", tags: ["Old lead"], segment: "Legacy" },
+  { id: "i_316", name: "Reese Fisher", email: "reese.fisher@vetting.io", status: "CANCELED_DISABLED", bucket: "INACTIVE", lastEventAt: "2025-09-22", reason: "Was disabled before being canceled", tags: ["Buyer lead"], segment: "Drip: Buyers" },
+  { id: "i_317", name: "Parker Mills", email: "parker.mills@example.com", status: "DISABLED_DURING_TESTING", bucket: "INACTIVE", lastEventAt: "2025-08-28", reason: "Disabled during testing", tags: ["Imported list"], segment: "New Imports" },
+  { id: "i_318", name: "Hayden Woods", email: "hayden.woods@contoso.com", status: "CANCELED_DISABLED_DURING_TESTING", bucket: "INACTIVE", lastEventAt: "2025-07-12", reason: "Disabled during testing before being canceled", tags: ["Sphere"], segment: "Newsletter" },
+  { id: "i_319", name: "Emery Ross", email: "emery.ross@client.com", status: "ACTIVE", bucket: "ACTIVE", daysUnengaged: 2, lastEventAt: "2025-11-20", reason: "Active — finished testing and receiving emails", tags: ["Buyer lead"], segment: "Drip: Buyers", activityType: "hot_lead" },
+  { id: "i_320", name: "Finley Hughes", email: "finley.hughes@example.org", status: "PENDING_VETTING", bucket: "ACTIVE", daysUnengaged: 4, lastEventAt: "2025-11-18", reason: "Pending — in validation/testing phase", tags: ["Imported list"], segment: "New Imports", activityType: "form_submitter" },
+  { id: "i_321", name: "Rowan Palmer", email: "rowan.palmer@mail.com", status: "SUNSET", bucket: "INACTIVE", lastEventAt: "2024-11-01", reason: "Inactive — sunset due to no engagement", tags: ["Old lead"], segment: "Legacy" },
+  { id: "i_322", name: "Sam Vega", email: "sam.vega@example.com", status: "DEDUPED", bucket: "INACTIVE", lastEventAt: "2025-06-08", reason: "Owned by another account", tags: ["Past client"], segment: "Quarterly Touch" },
+  { id: "i_323", name: "Alex Norton", email: "alex.norton@contoso.com", status: "BLOCKED", bucket: "INACTIVE", lastEventAt: "2025-05-14", reason: "Marked as bad email", tags: ["Buyer lead"], segment: "Drip: Buyers" },
+  { id: "i_324", name: "Taylor Boone", email: "taylor.boone@blocked.test", status: "BLOCKED_DOMAIN", bucket: "INACTIVE", lastEventAt: "2025-09-15", reason: "Email domain blocked during testing", tags: ["Imported list"], segment: "New Imports" },
+  { id: "i_325", name: "Jamie Cross", email: "jamie.cross@baddomain.net", status: "GLOBAL_BLOCKED_DOMAIN", bucket: "INACTIVE", lastEventAt: "2025-04-22", reason: "Email domain blocked system-wide", tags: ["Sphere"], segment: "Newsletter" },
+  { id: "i_326", name: "Casey Logan", email: "casey.logan@client.io", status: "CANCELED", bucket: "INACTIVE", lastEventAt: "2025-10-08", reason: "Was active before being canceled", tags: ["Past client"], segment: "Quarterly Touch" },
+  { id: "i_327", name: "Riley Chandler", email: "admin@company.org", status: "ROLE", bucket: "INACTIVE", lastEventAt: "2025-08-20", reason: "Role-based email detected", tags: ["Buyer lead"], segment: "Drip: Buyers" },
+  { id: "i_328", name: "Quinn Barber", email: "quinn.barber@currentcustomer.com", status: "CUSTOMER", bucket: "INACTIVE", lastEventAt: "2025-11-05", reason: "Suppressed (current customer email)", tags: ["Past client"], segment: "Newsletter" },
+  { id: "i_329", name: "Avery Daniels", email: "avery.daniels@example.net", status: "PERM_DELETE", bucket: "INACTIVE", lastEventAt: "2025-03-10", reason: "Permanently removed", tags: ["Old lead"], segment: "Legacy" },
+  { id: "i_330", name: "Skyler Brewer", email: "skyler.brewer@vetting.io", status: "SUNSET", bucket: "INACTIVE", lastEventAt: "2024-10-15", reason: "Inactive — sunset due to no engagement", tags: ["Sphere"], segment: "Newsletter" },
+  { id: "i_331", name: "Drew Horton", email: "drew.horton@example.com", status: "DISABLED_DURING_TESTING", bucket: "INACTIVE", lastEventAt: "2025-09-02", reason: "Disabled during testing", tags: ["Imported list"], segment: "New Imports" },
+  { id: "i_332", name: "Blake Olson", email: "blake.olson@contoso.com", status: "CANCELED_DURING_TESTING", bucket: "INACTIVE", lastEventAt: "2025-07-28", reason: "Was in testing before being canceled", tags: ["Buyer lead"], segment: "Drip: Buyers" },
+  { id: "i_333", name: "Cameron Dean", email: "cameron.dean@client.com", status: "ACTIVE", bucket: "ACTIVE", daysUnengaged: 0, lastEventAt: "2025-11-22", reason: "Active — finished testing and receiving emails", tags: ["Past client"], segment: "Quarterly Touch", activityType: "referral" },
 ];
 
 const STATUS_COLORS = {
@@ -188,6 +237,20 @@ const STATUS_COLORS = {
   UNSUBSCRIBED: "gray",
   SPAM_REPORT: "gray",
   DISABLED: "gray",
+  DEDUPED: "gray",
+  BLOCKED: "gray",
+  BLOCKED_DOMAIN: "gray",
+  GLOBAL_BLOCKED_DOMAIN: "gray",
+  CANCELED: "gray",
+  CANCELED_DURING_TESTING: "gray",
+  ROLE: "gray",
+  CUSTOMER: "gray",
+  PERM_DELETE: "gray",
+  CANCELED_DISABLED: "gray",
+  DISABLED_DURING_TESTING: "gray",
+  CANCELED_DISABLED_DURING_TESTING: "gray",
+  GOOD_TO_GO: "green",
+  VETTING: "blue",
 };
 
 const ALL_STATUSES = [
@@ -198,6 +261,21 @@ const ALL_STATUSES = [
   "SUNSET",
   "UNSUBSCRIBED",
   "SPAM_REPORT",
+  "DISABLED",
+  "DEDUPED",
+  "BLOCKED",
+  "BLOCKED_DOMAIN",
+  "GLOBAL_BLOCKED_DOMAIN",
+  "CANCELED",
+  "CANCELED_DURING_TESTING",
+  "ROLE",
+  "CUSTOMER",
+  "PERM_DELETE",
+  "CANCELED_DISABLED",
+  "DISABLED_DURING_TESTING",
+  "CANCELED_DISABLED_DURING_TESTING",
+  "GOOD_TO_GO",
+  "VETTING",
 ];
 
 // Status filter options for the "Show contacts that are:" picklist (value, display label)
@@ -224,6 +302,9 @@ const ACTIVITY_OPTIONS = LAST_ACTIVITY_OPTIONS;
 const ALL_CONTACT_TAGS = [...new Set(CONTACTS.flatMap((c) => c.tags))].sort();
 
 const CONTACTS_PAGE_SIZE = 20;
+
+// Reference date for Contact Health bucket math (so mock lastEventAt dates count correctly as Active/Unengaged)
+const CONTACT_HEALTH_REFERENCE_DATE = new Date("2025-11-28");
 
 // Campaign type options for View across > Campaign Type
 const CAMPAIGN_TYPE_OPTIONS = [
@@ -512,7 +593,9 @@ export default function ContactStatusDashboard() {
   const [draftCampaignType, setDraftCampaignType] = useState("All campaigns");
   const [statusFilterPicklistOpen, setStatusFilterPicklistOpen] = useState(false);
   const [draftStatusFilter, setDraftStatusFilter] = useState("ALL");
-  const [disabledContactIds, setDisabledContactIds] = useState(["d_401", "d_402", "d_403"]);
+  const [disabledContactIds, setDisabledContactIds] = useState([]);
+  // When a disabled contact is enabled, their status becomes PENDING_VETTING (overrides CONTACTS status for display/filter)
+  const [contactStatusOverrides, setContactStatusOverrides] = useState({});
   const [selectedActiveIds, setSelectedActiveIds] = useState([]);
   const [selectedInactiveDisabledIds, setSelectedInactiveDisabledIds] = useState([]);
   const [selectAllDialogOpen, setSelectAllDialogOpen] = useState(false);
@@ -523,17 +606,39 @@ export default function ContactStatusDashboard() {
   const [confirmDisableEnableCount, setConfirmDisableEnableCount] = useState(0);
   // Dev-only phase toggles (for explanation; not part of product design)
   const [phase1, setPhase1] = useState(true);
+  const [phase1_5, setPhase1_5] = useState(true);
   const [phase2, setPhase2] = useState(true);
   const [phase3, setPhase3] = useState(true);
   const [phase4, setPhase4] = useState(true);
   const [phaseTbd, setPhaseTbd] = useState(true);
+  const [devFeatureAH, setDevFeatureAH] = useState(false);
   // Sort state per section (key = column key, dir = 'asc' | 'desc'); user stays on same page when sorting
   const [sortUnengaged, setSortUnengaged] = useState(null);
   const [sortActive, setSortActive] = useState(null);
   const [sortInactive, setSortInactive] = useState(null);
+  // Feature AH: Contact Health tile selection (multi-select bucket keys)
+  const [contactHealthSelectedBuckets, setContactHealthSelectedBuckets] = useState([]);
+  const sectionUnengagedRef = useRef(null);
+  const sectionActiveRef = useRef(null);
+  const sectionInactiveRef = useRef(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportPreviewRows, setExportPreviewRows] = useState(null);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [phase1PopoverOpen, setPhase1PopoverOpen] = useState(false);
 
   const listTagMode = listTagFilterMode ?? "any";
   const listTags = listSelectedTags ?? [];
+
+  // Contacts with effective status (enabled contacts get PENDING_VETTING) and bucket (enabled-from-DISABLED move to ACTIVE)
+  const effectiveContacts = useMemo(
+    () =>
+      CONTACTS.map((c) => {
+        const status = contactStatusOverrides[c.id] ?? c.status;
+        const bucket = contactStatusOverrides[c.id] === "PENDING_VETTING" ? "ACTIVE" : c.bucket;
+        return { ...c, status, bucket };
+      }),
+    [contactStatusOverrides]
+  );
 
   const isInLastActivityRange = (lastEventAtStr, range, startStr, endStr) => {
     if (!lastEventAtStr || range === "any") return true;
@@ -560,7 +665,7 @@ export default function ContactStatusDashboard() {
 
   const filteredContacts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let list = CONTACTS.filter((c) => {
+    let list = effectiveContacts.filter((c) => {
       if (statusFilter !== "ALL" && c.status !== statusFilter) return false;
       if (listTagMode === "any") {
         // no tag filter
@@ -582,14 +687,25 @@ export default function ContactStatusDashboard() {
         list = list.filter((c) => c.tags.length === 0);
       }
     }
+    // Contact Health tile filter (Feature AH): union of selected buckets (use same reference date as tiles)
+    if (devFeatureAH && contactHealthSelectedBuckets.length > 0) {
+      list = list.filter((c) =>
+        contactHealthSelectedBuckets.includes(
+          getBucket(
+            { status: c.status, lastEventAt: c.lastEventAt, lastEngagementDate: c.lastEventAt },
+            CONTACT_HEALTH_REFERENCE_DATE
+          )
+        )
+      );
+    }
     return list;
-  }, [statusFilter, listTagMode, listTags, lastActivityRange, activityStartDate, activityEndDate, search, viewAcross, tagFilterMode, selectedTags]);
+  }, [effectiveContacts, statusFilter, listTagMode, listTags, lastActivityRange, activityStartDate, activityEndDate, search, viewAcross, tagFilterMode, selectedTags, devFeatureAH, contactHealthSelectedBuckets]);
 
   useEffect(() => {
     setPageUnengaged(1);
     setPageActive(1);
     setPageInactive(1);
-  }, [statusFilter, listTagMode, listTags, lastActivityRange, activityStartDate, activityEndDate, search, disabledContactIds]);
+  }, [statusFilter, listTagMode, listTags, lastActivityRange, activityStartDate, activityEndDate, search, disabledContactIds, contactHealthSelectedBuckets]);
 
   const openTagPicklist = () => {
     setDraftTagFilterMode(tagFilterMode);
@@ -674,6 +790,22 @@ export default function ContactStatusDashboard() {
 
   const statusFilterLabel = statusFilter === "ALL" ? "Any status" : statusFilter;
 
+  const clearFilters = () => {
+    setStatusFilter("ALL");
+    setDraftStatusFilter("ALL");
+    setListTagFilterMode("any");
+    setDraftListTagFilterMode("any");
+    setListSelectedTags([]);
+    setDraftListSelectedTags([]);
+    setLastActivityRange("any");
+    setDraftLastActivityRange("any");
+    setActivityStartDate("");
+    setActivityEndDate("");
+    setDraftActivityStartDate("");
+    setDraftActivityEndDate("");
+    setSearch("");
+  };
+
   const openActivityPicklist = () => {
     setDraftLastActivityRange(lastActivityRange);
     setDraftActivityStartDate(activityStartDate);
@@ -752,7 +884,7 @@ export default function ContactStatusDashboard() {
     } else if (selectAllDialogSection === "inactive") {
       const start = (pageInactive - 1) * CONTACTS_PAGE_SIZE;
       const pageRows = sortedInactive.slice(start, start + CONTACTS_PAGE_SIZE);
-      const disabledOnPage = pageRows.filter((c) => disabledContactIds.includes(c.id)).map((c) => c.id);
+      const disabledOnPage = pageRows.filter((c) => disabledContactIds.includes(c.id) || c.status === "DISABLED").map((c) => c.id);
       setSelectedInactiveDisabledIds(disabledOnPage);
     }
     closeSelectAllDialog();
@@ -799,7 +931,7 @@ export default function ContactStatusDashboard() {
     setSelectedActiveIds([]);
   };
 
-  const inactiveDisabled = inactive.filter((c) => disabledContactIds.includes(c.id));
+  const inactiveDisabled = inactive.filter((c) => disabledContactIds.includes(c.id) || c.status === "DISABLED");
   const allInactiveDisabledSelected = inactiveDisabled.length > 0 && selectedInactiveDisabledIds.length === inactiveDisabled.length;
   const toggleSelectAllInactiveDisabled = (checked) => {
     if (checked) {
@@ -813,6 +945,13 @@ export default function ContactStatusDashboard() {
   const selectedInactiveDisabledCount = selectedInactiveDisabledIds.length;
   const handleEnableInactive = () => {
     setDisabledContactIds((prev) => prev.filter((id) => !selectedInactiveDisabledIds.includes(id)));
+    setContactStatusOverrides((prev) => {
+      const next = { ...prev };
+      selectedInactiveDisabledIds.forEach((id) => {
+        next[id] = "PENDING_VETTING";
+      });
+      return next;
+    });
     setSelectedInactiveDisabledIds([]);
   };
 
@@ -962,7 +1101,7 @@ export default function ContactStatusDashboard() {
         </div>
       ),
       render: (r) =>
-        disabledContactIds.includes(r.id) ? (
+        disabledContactIds.includes(r.id) || r.status === "DISABLED" ? (
           <div className="flex w-full items-center justify-center">
             <input
               type="checkbox"
@@ -981,7 +1120,7 @@ export default function ContactStatusDashboard() {
       key: "status",
       label: "Status",
       render: (r) =>
-        disabledContactIds.includes(r.id) ? (
+        disabledContactIds.includes(r.id) || r.status === "DISABLED" ? (
           <Pill tone="gray">Disabled</Pill>
         ) : (
           <Pill tone={STATUS_COLORS[r.status] || "gray"}>{r.status}</Pill>
@@ -995,8 +1134,25 @@ export default function ContactStatusDashboard() {
     },
   ];
 
+  if (exportPreviewRows !== null) {
+    return (
+      <ExportPreview
+        exportRows={exportPreviewRows}
+        onBack={() => setExportPreviewRows(null)}
+      />
+    );
+  }
+
   return (
     <TooltipProvider>
+      <ExportDialog
+        open={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        effectiveContacts={effectiveContacts}
+        filteredContacts={filteredContacts}
+        referenceDate={CONTACT_HEALTH_REFERENCE_DATE}
+        onPreviewExport={(rows) => setExportPreviewRows(rows)}
+      />
       <div className="flex min-h-screen bg-[#F3F3F3] text-gray-800">
         {/* Sidebar - dark gray with green active state */}
         <aside className="w-56 flex-shrink-0 bg-sidebar flex flex-col text-white">
@@ -1047,10 +1203,12 @@ export default function ContactStatusDashboard() {
             <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">Dev phases</div>
             {[
               { label: "Phase 1", checked: phase1, onChange: setPhase1 },
+              { label: "Phase 1.5", checked: phase1_5, onChange: setPhase1_5 },
               { label: "Phase 2", checked: phase2, onChange: setPhase2 },
               { label: "Phase 3", checked: phase3, onChange: setPhase3 },
               { label: "Phase 4", checked: phase4, onChange: setPhase4 },
               { label: "Phase TBD", checked: phaseTbd, onChange: setPhaseTbd },
+              { label: "Feature AH", checked: devFeatureAH, onChange: setDevFeatureAH },
             ].map(({ label, checked, onChange }) => (
               <label key={label} className="flex items-center justify-between gap-2 cursor-pointer text-gray-800 text-sm">
                 <span className="font-medium">{label}</span>
@@ -1305,307 +1463,293 @@ export default function ContactStatusDashboard() {
             </section>
             )}
 
-            {/* Phase 1: Education / status explanation - light blue card */}
-            {phase1 && (
-            <Card className="border border-[#68BCE1]/40 bg-[#68BCE1]/10 shadow-sm">
-              <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="space-y-1 text-sm text-gray-700">
-                  <p className="font-semibold text-gray-800">How statuses work</p>
-                  <p>
-                    Each contact has a status that controls whether they can receive campaigns. Unengaged contacts are
-                    still sendable but at risk of being sunset. Inactive statuses (like SUNSET or UNSUBSCRIBED) are
-                    read-only and cannot be mailed.
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Visit the deliverability explanation page to see definitions, examples, and recommendations for each
-                    status.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="self-start sm:self-auto mt-2.5 px-3 py-1.5 text-sm font-medium rounded border border-header-bar/50 bg-white text-[#2a6b7c] hover:bg-[#00AFEF] hover:text-white transition-colors"
-                  onClick={() => {}}
-                >
-                  Open Contact Status Guide
-                </button>
-              </CardContent>
-            </Card>
-            )}
-
-            {/* Phase 2: Global filters + counts */}
-            {phase2 && (
-            <Card className="shadow-sm">
+            {/* Unified Contact Health control panel card */}
+            <Card className="shadow-sm" aria-labelledby="contact-health-panel-title">
               <CardContent className="p-4 space-y-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-6">
-                  <div className="w-full md:w-52 relative">
-                    <label className="block text-xs text-gray-600 mb-1">Status filter</label>
-                    <button
-                      type="button"
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800 text-left hover:bg-gray-50 flex items-center justify-between"
-                      onClick={openStatusFilterPicklist}
-                    >
-                      <span>{statusFilterLabel}</span>
-                      <span className="text-gray-400">▼</span>
-                    </button>
-                    {statusFilterPicklistOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          aria-hidden="true"
-                          onClick={cancelStatusFilterPicklist}
-                        />
-                        <div className="absolute left-0 top-full mt-1 z-50 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
-                          <p className="text-sm font-medium text-gray-700 mb-3">Show contacts that are:</p>
-                          <div className="space-y-2 flex-shrink-0">
-                            {STATUS_FILTER_OPTIONS.map((opt) => (
-                              <label
-                                key={opt.value}
-                                className="flex items-center gap-2 cursor-pointer"
-                              >
-                                <input
-                                  type="radio"
-                                  name="statusFilter"
-                                  checked={draftStatusFilter === opt.value}
-                                  onChange={() => setDraftStatusFilter(opt.value)}
-                                  className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]"
-                                />
-                                <span className={`text-sm ${draftStatusFilter === opt.value ? "text-gray-800 font-medium" : "text-gray-600"}`}>
-                                  {opt.label}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                          <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end gap-2 flex-shrink-0">
-                            <button
-                              type="button"
-                              className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-200 rounded hover:bg-gray-300 uppercase"
-                              onClick={cancelStatusFilterPicklist}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              className="px-3 py-1.5 text-xs font-semibold text-white bg-[#2a7fb8] rounded hover:opacity-90 uppercase"
-                              onClick={applyStatusFilterPicklist}
-                            >
-                              Apply
-                            </button>
-                          </div>
+                {/* Header row: title + (Phase 1) info popover; subtitle under title */}
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 id="contact-health-panel-title" className="text-lg font-semibold text-gray-800">
+                        Contact Health
+                      </h2>
+                      {phase1 && (
+                        <div className="relative inline-block">
+                          <button
+                            type="button"
+                            onClick={() => setPhase1PopoverOpen((prev) => !prev)}
+                            onBlur={() => setPhase1PopoverOpen(false)}
+                            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                            aria-label="How statuses work"
+                            aria-expanded={phase1PopoverOpen}
+                          >
+                            <InfoIcon size={16} className="text-gray-500" />
+                          </button>
+                          {phase1PopoverOpen && (
+                            <>
+                              <div className="fixed inset-0 z-40" aria-hidden="true" onClick={() => setPhase1PopoverOpen(false)} />
+                              <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 border-l-2 border-l-[#68BCE1]">
+                                <p className="text-sm font-semibold text-gray-800 mb-2">How statuses work</p>
+                                <p className="text-sm text-gray-700 mb-3">
+                                  Each contact has a status that controls whether they can receive campaigns. Unengaged contacts are still sendable but at risk of sunset; inactive statuses (e.g. SUNSET, UNSUBSCRIBED) are read-only.
+                                </p>
+                                <button
+                                  type="button"
+                                  className="text-sm font-medium text-[#2a7fb8] hover:underline"
+                                  onClick={() => {}}
+                                >
+                                  Open Contact Status Guide
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
-                      </>
-                    )}
+                      )}
+                    </div>
+                    {devFeatureAH && <p className="text-sm text-gray-500 mt-0.5">Click a tile to filter contacts.</p>}
                   </div>
-                  <div className="w-full md:w-52 relative">
-                    <label className="block text-xs text-gray-600 mb-1">Tag</label>
-                    <button
-                      type="button"
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800 text-left hover:bg-gray-50 flex items-center justify-between"
-                      onClick={openListTagPicklist}
-                    >
-                      <span>{listTagLabel}</span>
-                      <span className="text-gray-400">▼</span>
-                    </button>
-                    {listTagPicklistOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          aria-hidden="true"
-                          onClick={cancelListTagPicklist}
-                        />
-                        <div className="absolute left-0 top-full mt-1 z-50 w-80 max-h-[420px] bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
-                          <p className="text-sm font-medium text-gray-800 mb-3">Show metrics for contacts that are:</p>
-                          <div className="space-y-3 flex-shrink-0">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="listTagFilterMode"
-                                checked={draftListTagFilterMode === "any"}
-                                onChange={() => setDraftListTagFilterMode("any")}
-                                className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]"
-                              />
-                              <span className="text-sm text-gray-800">Any tags</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="listTagFilterMode"
-                                checked={draftListTagFilterMode === "specific"}
-                                onChange={() => setDraftListTagFilterMode("specific")}
-                                className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]"
-                              />
-                              <span className="text-sm text-gray-800">Specific tags</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="listTagFilterMode"
-                                checked={draftListTagFilterMode === "none"}
-                                onChange={() => setDraftListTagFilterMode("none")}
-                                className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]"
-                              />
-                              <span className="text-sm text-gray-800">No tags</span>
-                            </label>
-                          </div>
-                          {draftListTagFilterMode === "specific" && (
-                            <div className="mt-3 flex-1 min-h-0 overflow-auto">
-                              <div className="flex flex-wrap gap-2">
-                                {ALL_CONTACT_TAGS.map((tag) => (
-                                  <button
-                                    key={tag}
-                                    type="button"
-                                    onClick={() => toggleDraftListTag(tag)}
-                                    className={`px-2.5 py-1 rounded text-xs font-medium ${
-                                      draftListSelectedTags.includes(tag)
-                                        ? "bg-[#60B570] text-white"
-                                        : "bg-[#68BCE1]/80 text-white"
-                                    }`}
-                                  >
-                                    {tag}
-                                  </button>
+                </div>
+
+                {/* Tile row: Feature AH gated */}
+                {devFeatureAH && (
+                  <ContactHealthTiles
+                    hideHeader
+                    referenceDate={CONTACT_HEALTH_REFERENCE_DATE}
+                    contacts={effectiveContacts.map((c) => ({
+                      status: c.status,
+                      lastEngagementDate: c.lastEventAt ?? c.lastEngagementDate ?? null,
+                    }))}
+                    selectedBuckets={contactHealthSelectedBuckets}
+                    onToggleBucket={(bucketKey) => {
+                      const isAdding = !contactHealthSelectedBuckets.includes(bucketKey);
+                      setContactHealthSelectedBuckets((prev) =>
+                        prev.includes(bucketKey) ? prev.filter((k) => k !== bucketKey) : [...prev, bucketKey]
+                      );
+                      if (isAdding) {
+                        setTimeout(() => {
+                          if (bucketKey === "ACTIVE" || bucketKey === "IN_VETTING") sectionActiveRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          else if (bucketKey === "UNENGAGED") sectionUnengagedRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          else if (bucketKey === "SUPPRESSED" || bucketKey === "UNSUBSCRIBED" || bucketKey === "DISABLED") sectionInactiveRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }, 0);
+                      }
+                    }}
+                    onRemoveBucket={(bucketKey) => {
+                      setContactHealthSelectedBuckets((prev) => prev.filter((k) => k !== bucketKey));
+                    }}
+                    onClearFilter={() => setContactHealthSelectedBuckets([])}
+                  />
+                )}
+
+                {/* Toolbar row: Phase 2 (Search + Advanced Search toggle) + Phase TBD (Export) */}
+                {phase2 && (
+                  <>
+                    <div className="flex flex-wrap items-end gap-3 border-t border-gray-200 pt-4">
+                      <div className="flex-1 min-w-[200px]">
+                        <label className="block text-xs text-gray-600 mb-1">Search</label>
+                        <div className="relative">
+                          <SearchIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                          <input
+                            type="text"
+                            placeholder="Search name or email"
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 pl-9 text-sm bg-white text-gray-800"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsAdvancedOpen((prev) => !prev)}
+                        className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded border ${
+                          isAdvancedOpen ? "border-[#2a7fb8] bg-[#2a7fb8]/10 text-[#2a7fb8]" : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                        }`}
+                        aria-expanded={isAdvancedOpen}
+                        aria-label={isAdvancedOpen ? "Close Advanced Search Options" : "Open Advanced Search Options"}
+                      >
+                        <FilterIcon size={18} className={isAdvancedOpen ? "text-[#2a7fb8]" : "text-gray-500"} />
+                        Advanced Search Options
+                      </button>
+                      {phaseTbd && (
+                        <button
+                          type="button"
+                          onClick={() => setExportDialogOpen(true)}
+                          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                          aria-label="Export contacts"
+                        >
+                          <DownloadIcon size={18} className="text-gray-600" />
+                          Export
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filter counts summary line: Phase 2 */}
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 border-t border-gray-200 pt-3">
+                      <div className="inline-flex items-center gap-1">
+                        <FilterIcon size={14} className="text-gray-500" />
+                        <span>
+                          Showing <span className="font-semibold text-gray-800">{totalCount}</span> contact
+                          {totalCount !== 1 && "s"} matching the current filters
+                        </span>
+                      </div>
+                      <span className="text-gray-400">•</span>
+                      <span>
+                        <span className="font-semibold text-gray-800">{unengagedCount}</span> unengaged at risk •
+                        <span className="font-semibold text-gray-800 ml-1">{activeCount}</span> active/pending •
+                        <span className="font-semibold text-gray-800 ml-1">{inactiveCount}</span> inactive
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {/* Advanced Search Options panel: Phase 2 + collapsible */}
+                {phase2 && isAdvancedOpen && (
+                  <div className="border-t border-gray-200 pt-4 space-y-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-6 flex-wrap">
+                      <div className="w-full md:w-52 relative">
+                        <label className="block text-xs text-gray-600 mb-1">Status filter</label>
+                        <button
+                          type="button"
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800 text-left hover:bg-gray-50 flex items-center justify-between"
+                          onClick={openStatusFilterPicklist}
+                        >
+                          <span>{statusFilterLabel}</span>
+                          <span className="text-gray-400">▼</span>
+                        </button>
+                        {statusFilterPicklistOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" aria-hidden="true" onClick={cancelStatusFilterPicklist} />
+                            <div className="absolute left-0 top-full mt-1 z-50 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
+                              <p className="text-sm font-medium text-gray-700 mb-3">Show contacts that are:</p>
+                              <div className="space-y-2 flex-shrink-0">
+                                {STATUS_FILTER_OPTIONS.map((opt) => (
+                                  <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="radio"
+                                      name="statusFilter"
+                                      checked={draftStatusFilter === opt.value}
+                                      onChange={() => setDraftStatusFilter(opt.value)}
+                                      className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]"
+                                    />
+                                    <span className={`text-sm ${draftStatusFilter === opt.value ? "text-gray-800 font-medium" : "text-gray-600"}`}>{opt.label}</span>
+                                  </label>
                                 ))}
                               </div>
-                            </div>
-                          )}
-                          <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end gap-2 flex-shrink-0">
-                            <button
-                              type="button"
-                              className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-200 rounded hover:bg-gray-300 uppercase"
-                              onClick={cancelListTagPicklist}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              className="px-3 py-1.5 text-xs font-semibold text-white bg-[#2db3a8] rounded hover:opacity-90 uppercase"
-                              onClick={applyListTagPicklist}
-                            >
-                              Apply
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <div className="w-full md:w-52 relative">
-                    <label className="block text-xs text-gray-600 mb-1">Last Activity</label>
-                    <button
-                      type="button"
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800 text-left hover:bg-gray-50 flex items-center justify-between"
-                      onClick={openActivityPicklist}
-                    >
-                      <span>{lastActivityLabel}</span>
-                      <span className="text-gray-400">▼</span>
-                    </button>
-                    {activityPicklistOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          aria-hidden="true"
-                          onClick={cancelActivityPicklist}
-                        />
-                        <div className="absolute left-0 top-full mt-1 z-50 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
-                          <p className="text-sm font-bold text-gray-800 mb-3">Show contacts with activity in:</p>
-                          <div className="space-y-2 flex-shrink-0">
-                            {LAST_ACTIVITY_OPTIONS.map((opt) => (
-                              <label
-                                key={opt.value}
-                                className="flex items-center gap-3 cursor-pointer"
-                              >
-                                <input
-                                  type="radio"
-                                  name="lastActivityRange"
-                                  checked={draftLastActivityRange === opt.value}
-                                  onChange={() => setDraftLastActivityRange(opt.value)}
-                                  className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]"
-                                />
-                                <span className={`text-sm ${draftLastActivityRange === opt.value ? "text-gray-800 font-medium" : "text-gray-600"}`}>
-                                  {opt.label}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                          {draftLastActivityRange === "custom" && (
-                            <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                              <div>
-                                <label className="block text-xs text-gray-600 mb-1">Start date</label>
-                                <input
-                                  type="date"
-                                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800"
-                                  value={draftActivityStartDate}
-                                  onChange={(e) => setDraftActivityStartDate(e.target.value)}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-gray-600 mb-1">End date</label>
-                                <input
-                                  type="date"
-                                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800"
-                                  value={draftActivityEndDate}
-                                  onChange={(e) => setDraftActivityEndDate(e.target.value)}
-                                />
+                              <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end gap-2 flex-shrink-0">
+                                <button type="button" className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-200 rounded hover:bg-gray-300 uppercase" onClick={cancelStatusFilterPicklist}>Cancel</button>
+                                <button type="button" className="px-3 py-1.5 text-xs font-semibold text-white bg-[#2a7fb8] rounded hover:opacity-90 uppercase" onClick={applyStatusFilterPicklist}>Apply</button>
                               </div>
                             </div>
-                          )}
-                          <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end gap-2 flex-shrink-0">
-                            <button
-                              type="button"
-                              className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-200 rounded hover:bg-gray-300 uppercase"
-                              onClick={cancelActivityPicklist}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              className="px-3 py-1.5 text-xs font-semibold text-white bg-[#2a7fb8] rounded hover:opacity-90 uppercase"
-                              onClick={applyActivityPicklist}
-                            >
-                              Apply
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex-1" />
-                  <div className="w-full md:w-64">
-                    <label className="block text-xs text-gray-600 mb-1">Search</label>
-                    <div className="relative">
-                      <SearchIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                      <input
-                        type="text"
-                        placeholder="Search name or email"
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 pl-9 text-sm bg-white text-gray-800"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
+                          </>
+                        )}
+                      </div>
+                      <div className="w-full md:w-52 relative">
+                        <label className="block text-xs text-gray-600 mb-1">Tag</label>
+                        <button
+                          type="button"
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800 text-left hover:bg-gray-50 flex items-center justify-between"
+                          onClick={openListTagPicklist}
+                        >
+                          <span>{listTagLabel}</span>
+                          <span className="text-gray-400">▼</span>
+                        </button>
+                        {listTagPicklistOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" aria-hidden="true" onClick={cancelListTagPicklist} />
+                            <div className="absolute left-0 top-full mt-1 z-50 w-80 max-h-[420px] bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
+                              <p className="text-sm font-medium text-gray-800 mb-3">Show metrics for contacts that are:</p>
+                              <div className="space-y-3 flex-shrink-0">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input type="radio" name="listTagFilterMode" checked={draftListTagFilterMode === "any"} onChange={() => setDraftListTagFilterMode("any")} className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]" />
+                                  <span className="text-sm text-gray-800">Any tags</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input type="radio" name="listTagFilterMode" checked={draftListTagFilterMode === "specific"} onChange={() => setDraftListTagFilterMode("specific")} className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]" />
+                                  <span className="text-sm text-gray-800">Specific tags</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input type="radio" name="listTagFilterMode" checked={draftListTagFilterMode === "none"} onChange={() => setDraftListTagFilterMode("none")} className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]" />
+                                  <span className="text-sm text-gray-800">No tags</span>
+                                </label>
+                              </div>
+                              {draftListTagFilterMode === "specific" && (
+                                <div className="mt-3 flex-1 min-h-0 overflow-auto">
+                                  <div className="flex flex-wrap gap-2">
+                                    {ALL_CONTACT_TAGS.map((tag) => (
+                                      <button
+                                        key={tag}
+                                        type="button"
+                                        onClick={() => toggleDraftListTag(tag)}
+                                        className={`px-2.5 py-1 rounded text-xs font-medium ${draftListSelectedTags.includes(tag) ? "bg-[#60B570] text-white" : "bg-[#68BCE1]/80 text-white"}`}
+                                      >
+                                        {tag}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end gap-2 flex-shrink-0">
+                                <button type="button" className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-200 rounded hover:bg-gray-300 uppercase" onClick={cancelListTagPicklist}>Cancel</button>
+                                <button type="button" className="px-3 py-1.5 text-xs font-semibold text-white bg-[#2db3a8] rounded hover:opacity-90 uppercase" onClick={applyListTagPicklist}>Apply</button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="w-full md:w-52 relative">
+                        <label className="block text-xs text-gray-600 mb-1">Last Activity</label>
+                        <button
+                          type="button"
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800 text-left hover:bg-gray-50 flex items-center justify-between"
+                          onClick={openActivityPicklist}
+                        >
+                          <span>{lastActivityLabel}</span>
+                          <span className="text-gray-400">▼</span>
+                        </button>
+                        {activityPicklistOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" aria-hidden="true" onClick={cancelActivityPicklist} />
+                            <div className="absolute left-0 top-full mt-1 z-50 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col border-l-2 border-l-[#68BCE1]">
+                              <p className="text-sm font-bold text-gray-800 mb-3">Show contacts with activity in:</p>
+                              <div className="space-y-2 flex-shrink-0">
+                                {LAST_ACTIVITY_OPTIONS.map((opt) => (
+                                  <label key={opt.value} className="flex items-center gap-3 cursor-pointer">
+                                    <input type="radio" name="lastActivityRange" checked={draftLastActivityRange === opt.value} onChange={() => setDraftLastActivityRange(opt.value)} className="rounded-full border-gray-300 text-[#2a7fb8] focus:ring-[#2a7fb8]" />
+                                    <span className={`text-sm ${draftLastActivityRange === opt.value ? "text-gray-800 font-medium" : "text-gray-600"}`}>{opt.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                              {draftLastActivityRange === "custom" && (
+                                <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                                  <div>
+                                    <label className="block text-xs text-gray-600 mb-1">Start date</label>
+                                    <input type="date" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800" value={draftActivityStartDate} onChange={(e) => setDraftActivityStartDate(e.target.value)} />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs text-gray-600 mb-1">End date</label>
+                                    <input type="date" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white text-gray-800" value={draftActivityEndDate} onChange={(e) => setDraftActivityEndDate(e.target.value)} />
+                                  </div>
+                                </div>
+                              )}
+                              <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end gap-2 flex-shrink-0">
+                                <button type="button" className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-200 rounded hover:bg-gray-300 uppercase" onClick={cancelActivityPicklist}>Cancel</button>
+                                <button type="button" className="px-3 py-1.5 text-xs font-semibold text-white bg-[#2a7fb8] rounded hover:opacity-90 uppercase" onClick={applyActivityPicklist}>Apply</button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <button type="button" onClick={clearFilters} className="px-3 py-2 text-sm font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
+                        Clear filters
+                      </button>
                     </div>
                   </div>
-                </div>
-
-                {phaseTbd && (
-                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 border-t border-filter-bar pt-3">
-                  <div className="inline-flex items-center gap-1">
-                    <FilterIcon size={14} className="text-gray-500" />
-                    <span>
-                      Showing <span className="font-semibold text-gray-800">{totalCount}</span> contact
-                      {totalCount !== 1 && "s"} matching the current filters
-                    </span>
-                  </div>
-                  <span className="text-gray-400">•</span>
-                  <span>
-                    <span className="font-semibold text-gray-800">{unengagedCount}</span> unengaged at risk •
-                    <span className="font-semibold text-gray-800 ml-1">{activeCount}</span> active/pending •
-                    <span className="font-semibold text-gray-800 ml-1">{inactiveCount}</span> inactive
-                  </span>
-                </div>
                 )}
               </CardContent>
             </Card>
-            )}
 
             {/* Phase TBD: Unengaged contacts at risk of sunset */}
             {phaseTbd && (
-            <section className="space-y-3">
+            <section ref={sectionUnengagedRef} className="space-y-3">
               <SectionTable
                 title="Unengaged contacts at risk of sunset"
                 badgeTone="orange"
@@ -1632,37 +1776,9 @@ export default function ContactStatusDashboard() {
             </section>
             )}
 
-            {/* Phase 1: Section 2 - Active / Pending vetting */}
+            {/* Phase 1: Section 3 - Inactive contacts */}
             {phase1 && (
-            <>
-            <section>
-              <SectionTable
-                title="Active & pending (vetting) contacts"
-                badgeTone="green"
-                description="Contacts who are safe to send to. Green = fully active, Blue = still in a light vetting period."
-                rows={sortedActive}
-                columns={phase3 ? activeColumns : activeColumns.filter((c) => c.key !== "select")}
-                sortConfig={phaseTbd ? sortActive : null}
-                onSort={phaseTbd ? (key, dir) => setSortActive({ key, dir: dir ?? "asc" }) : undefined}
-                actionBar={
-                  phase3 && selectedActiveIds.length > 0 ? (
-                    <button
-                      type="button"
-                      className="mt-2.5 px-3 py-1.5 text-sm font-medium rounded bg-[#6B8394] text-white hover:bg-[#00AFEF] hover:text-white transition-colors"
-                      onClick={openConfirmDisableActive}
-                    >
-                      Disable
-                    </button>
-                  ) : null
-                }
-                pageSize={CONTACTS_PAGE_SIZE}
-                currentPage={pageActive}
-                onPageChange={setPageActive}
-              />
-            </section>
-
-            {/* Section 3: Inactive contacts */}
-            <section>
+            <section ref={sectionInactiveRef}>
               <SectionTable
                 title="Inactive contacts"
                 badgeTone="gray"
@@ -1687,7 +1803,35 @@ export default function ContactStatusDashboard() {
                 onPageChange={setPageInactive}
               />
             </section>
-            </>
+            )}
+
+            {/* Phase 1.5: Active / Pending vetting */}
+            {phase1 && phase1_5 && (
+            <section ref={sectionActiveRef}>
+              <SectionTable
+                title="Active & pending (vetting) contacts"
+                badgeTone="green"
+                description="Contacts who are safe to send to. Green = fully active, Blue = still in a light vetting period."
+                rows={sortedActive}
+                columns={phase3 ? activeColumns : activeColumns.filter((c) => c.key !== "select")}
+                sortConfig={phaseTbd ? sortActive : null}
+                onSort={phaseTbd ? (key, dir) => setSortActive({ key, dir: dir ?? "asc" }) : undefined}
+                actionBar={
+                  phase3 && selectedActiveIds.length > 0 ? (
+                    <button
+                      type="button"
+                      className="mt-2.5 px-3 py-1.5 text-sm font-medium rounded bg-[#6B8394] text-white hover:bg-[#00AFEF] hover:text-white transition-colors"
+                      onClick={openConfirmDisableActive}
+                    >
+                      Disable
+                    </button>
+                  ) : null
+                }
+                pageSize={CONTACTS_PAGE_SIZE}
+                currentPage={pageActive}
+                onPageChange={setPageActive}
+              />
+            </section>
             )}
           </div>
         </main>
